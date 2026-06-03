@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXO PAC-MAN</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Press Start 2P', monospace;
+    overflow: hidden;
+  }
+
+  h1 {
+    color: #FFD700;
+    font-size: 1.4rem;
+    letter-spacing: 4px;
+    margin-bottom: 2px;
+    text-shadow: 0 0 20px #FFD700, 0 0 40px #FF8C00;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .by-nexo {
+    color: #FF8C00;
+    font-size: 0.4rem;
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+    text-shadow: 0 0 10px #FF8C00;
+  }
+
+  @keyframes pulse {
+    0%, 100% { text-shadow: 0 0 20px #FFD700, 0 0 40px #FF8C00; }
+    50% { text-shadow: 0 0 40px #FFD700, 0 0 80px #FF8C00, 0 0 100px #FFD700; }
+  }
+
+  #hud {
+    display: flex;
+    justify-content: space-between;
+    width: 420px;
+    color: #fff;
+    font-size: 0.5rem;
+    margin-bottom: 4px;
+    padding: 0 4px;
+  }
+
+  #hud span { color: #FFD700; }
+
+  canvas {
+    border: 2px solid #1a1aff;
+    box-shadow: 0 0 30px #1a1aff, 0 0 60px rgba(26,26,255,0.4);
+    display: block;
+  }
+
+  #msg {
+    color: #FFD700;
+    font-size: 0.65rem;
+    margin-top: 8px;
+    min-height: 18px;
+    letter-spacing: 2px;
+    animation: blink 0.8s step-end infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #controls {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 64px);
+    grid-template-rows: repeat(2, 64px);
+    gap: 8px;
+  }
+
+  .btn {
+    background: #0a0a2a;
+    border: 3px solid #1a1aff;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 1.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 15px rgba(26,26,255,0.7), inset 0 0 10px rgba(26,26,255,0.2);
+    transition: background 0.08s, transform 0.08s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .btn:active, .btn.pressed {
+    background: #1a1aff;
+    transform: scale(0.92);
+    box-shadow: 0 0 25px #1a1aff;
+  }
+
+  #btn-up    { grid-column: 2; grid-row: 1; }
+  #btn-left  { grid-column: 1; grid-row: 2; }
+  #btn-down  { grid-column: 2; grid-row: 2; }
+  #btn-right { grid-column: 3; grid-row: 2; }
+
+  .footer-credit {
+    margin-top: 8px;
+    color: #333;
+    font-size: 0.3rem;
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+<h1>PAC-MAN</h1>
+<div class="by-nexo">★ BY NEXO ★</div>
+<div id="hud">
+  <div>SCORE: <span id="score">0</span></div>
+  <div>VIES: <span id="lives">3</span></div>
+  <div>NIVEAU: <span id="level">1</span></div>
+</div>
+<canvas id="c" width="420" height="420"></canvas>
+<div id="msg">APPUIE POUR JOUER</div>
+<div id="controls">
+  <button class="btn" id="btn-up">▲</button>
+  <button class="btn" id="btn-left">◀</button>
+  <button class="btn" id="btn-down">▼</button>
+  <button class="btn" id="btn-right">▶</button>
+</div>
+<div class="footer-credit">NEXO PACMAN v2.0</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const CELL = 20, COLS = 21, ROWS = 21;
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level');
+const msgEl = document.getElementById('msg');
+
+const BASE_MAP = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+  [1,3,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,3,1],
+  [1,0,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,0,1],
+  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+  [1,1,1,1,0,1,1,1,2,1,1,1,2,1,1,1,0,1,1,1,1],
+  [2,2,2,1,0,1,2,2,2,2,2,2,2,2,2,1,0,1,2,2,2],
+  [1,1,1,1,0,1,2,1,1,4,4,4,1,1,2,1,0,1,1,1,1],
+  [2,2,2,2,0,2,2,1,4,4,4,4,4,1,2,2,0,2,2,2,2],
+  [1,1,1,1,0,1,2,1,1,1,1,1,1,1,2,1,0,1,1,1,1],
+  [2,2,2,1,0,1,2,2,2,2,2,2,2,2,2,1,0,1,2,2,2],
+  [1,1,1,1,0,1,2,1,1,1,1,1,1,1,2,1,0,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1],
+  [1,3,0,1,0,0,0,0,0,0,2,0,0,0,0,0,0,1,0,3,1],
+  [1,1,0,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,1],
+  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+  [1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+let map, score, lives, level, gameState, pacman, ghosts, frightTimer, frightDuration;
+const GHOST_COLORS = ['#FF0000','#FFB8FF','#00FFFF','#FFB852'];
+
+function initGame() {
+  map = BASE_MAP.map(r => [...r]);
+  score = 0; lives = 3; level = 1;
+  frightTimer = 0; frightDuration = 300;
+  gameState = 'waiting';
+  updateHUD();
+  spawnPacman();
+  spawnGhosts();
+  msgEl.textContent = 'APPUIE POUR JOUER';
+}
+
+function spawnPacman() {
+  pacman = { x: 10, y: 16, dx: 0, dy: 0, nextDx: 0, nextDy: 0, mouth: 0, mouthDir: 1, move: 0 };
+}
+
+function spawnGhosts() {
+  ghosts = [
+    { x: 9.5,  y: 9.5,  dx: 0,  dy: -1, color: GHOST_COLORS[0], fright: false, eaten: false, moveTimer: 0 },
+    { x: 10.5, y: 9.5,  dx: 0,  dy: 1,  color: GHOST_COLORS[1], fright: false, eaten: false, moveTimer: 0 },
+    { x: 9.5,  y: 10.5, dx: -1, dy: 0,  color: GHOST_COLORS[2], fright: false, eaten: false, moveTimer: 0 },
+    { x: 10.5, y: 10.5, dx: 1,  dy: 0,  color: GHOST_COLORS[3], fright: false, eaten: false, moveTimer: 0 },
+  ];
+}
+
+function updateHUD() {
+  scoreEl.textContent = score;
+  livesEl.textContent = lives;
+  levelEl.textContent = level;
+}
+
+function isWall(x, y) {
+  const cx = Math.round(x), cy = Math.round(y);
+  if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS) return false;
+  return map[cy][cx] === 1;
+}
+
+function canMove(x, y, dx, dy) {
+  return !isWall(Math.round(x + dx), Math.round(y + dy));
+}
+
+function wrapX(x) {
+  if (x < 0) return COLS - 1;
+  if (x >= COLS) return 0;
+  return x;
+}
+
+// Input buffering — store last 2 inputs for smoother control
+let inputQueue = [];
+
+function pushDir(dx, dy) {
+  if (gameState === 'waiting') { gameState = 'playing'; msgEl.textContent = ''; }
+  if (gameState === 'gameover') { initGame(); return; }
+  inputQueue = [{ dx, dy }]; // immediate single-input, replace queue
+  pacman.nextDx = dx;
+  pacman.nextDy = dy;
+}
+
+function update() {
+  if (gameState !== 'playing') return;
+
+  pacman.move++;
+  // Faster: move every 2 frames instead of 3
+  if (pacman.move % 2 === 0) {
+    if (canMove(pacman.x, pacman.y, pacman.nextDx, pacman.nextDy)) {
+      pacman.dx = pacman.nextDx;
+      pacman.dy = pacman.nextDy;
+    }
+    if (canMove(pacman.x, pacman.y, pacman.dx, pacman.dy)) {
+      pacman.x = wrapX(pacman.x + pacman.dx);
+      pacman.y += pacman.dy;
+    }
+    pacman.x = Math.max(0, Math.min(COLS - 1, pacman.x));
+    pacman.y = Math.max(0, Math.min(ROWS - 1, pacman.y));
+
+    const cx = Math.round(pacman.x), cy = Math.round(pacman.y);
+    if (map[cy] && map[cy][cx] === 0) { map[cy][cx] = 2; score += 10; updateHUD(); }
+    if (map[cy] && map[cy][cx] === 3) {
+      map[cy][cx] = 2; score += 50; updateHUD();
+      frightTimer = frightDuration;
+      ghosts.forEach(g => { g.fright = true; g.eaten = false; });
+    }
+  }
+
+  pacman.mouth += 0.18 * pacman.mouthDir;
+  if (pacman.mouth > 0.4 || pacman.mouth < 0) pacman.mouthDir *= -1;
+
+  if (frightTimer > 0) { frightTimer--; if (frightTimer === 0) ghosts.forEach(g => g.fright = false); }
+
+  const speed = Math.max(3, 5 - Math.min(level - 1, 3));
+  ghosts.forEach(g => {
+    g.moveTimer++;
+    if (g.moveTimer % speed !== 0) return;
+
+    const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    const valid = dirs.filter(d => {
+      if (d.dx === -g.dx && d.dy === -g.dy) return false;
+      const nx = Math.round(g.x + d.dx), ny = Math.round(g.y + d.dy);
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return false;
+      return map[ny][nx] !== 1;
+    });
+
+    if (valid.length === 0) { g.dx *= -1; g.dy *= -1; return; }
+
+    let chosen;
+    if (g.fright) {
+      chosen = valid[Math.floor(Math.random() * valid.length)];
+    } else {
+      chosen = valid.reduce((best, d) => {
+        const dist = Math.hypot((g.x + d.dx) - pacman.x, (g.y + d.dy) - pacman.y);
+        const bdist = Math.hypot((g.x + best.dx) - pacman.x, (g.y + best.dy) - pacman.y);
+        return dist < bdist ? d : best;
+      });
+    }
+    g.dx = chosen.dx; g.dy = chosen.dy;
+    g.x = wrapX(g.x + g.dx);
+    g.y += g.dy;
+    g.x = Math.max(0, Math.min(COLS - 1, g.x));
+    g.y = Math.max(0, Math.min(ROWS - 1, g.y));
+
+    if (Math.hypot(g.x - pacman.x, g.y - pacman.y) < 0.9) {
+      if (g.fright && !g.eaten) {
+        g.eaten = true; g.fright = false;
+        score += 200; updateHUD();
+        g.x = 10; g.y = 9.5;
+      } else if (!g.eaten) {
+        lives--; updateHUD();
+        if (lives <= 0) { gameState = 'gameover'; msgEl.textContent = 'GAME OVER !'; return; }
+        spawnPacman();
+        gameState = 'waiting';
+        msgEl.textContent = 'APPUIE POUR CONTINUER';
+      }
+    }
+  });
+
+  const dotsLeft = map.flat().filter(c => c === 0 || c === 3).length;
+  if (dotsLeft === 0) {
+    level++;
+    map = BASE_MAP.map(r => [...r]);
+    spawnPacman(); spawnGhosts();
+    gameState = 'waiting';
+    msgEl.textContent = `NIVEAU ${level} !`;
+    updateHUD();
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const cell = map[y][x];
+      const px = x * CELL, py = y * CELL;
+      if (cell === 1) {
+        ctx.fillStyle = '#1a1aff';
+        ctx.fillRect(px, py, CELL, CELL);
+        ctx.strokeStyle = '#5555ff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
+      } else if (cell === 0) {
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(px + CELL/2, py + CELL/2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (cell === 3) {
+        const t = Date.now() / 400;
+        ctx.fillStyle = `hsl(${(t * 60) % 360}, 100%, 70%)`;
+        ctx.beginPath();
+        ctx.arc(px + CELL/2, py + CELL/2, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // Pacman
+  const px = pacman.x * CELL + CELL/2, py = pacman.y * CELL + CELL/2;
+  let angle = 0;
+  if (pacman.dx === 1) angle = 0;
+  else if (pacman.dx === -1) angle = Math.PI;
+  else if (pacman.dy === 1) angle = Math.PI / 2;
+  else if (pacman.dy === -1) angle = -Math.PI / 2;
+
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.arc(px, py, CELL/2 - 1, angle + pacman.mouth * Math.PI, angle + (2 - pacman.mouth) * Math.PI);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ghosts
+  ghosts.forEach(g => {
+    const gx = g.x * CELL + CELL/2, gy = g.y * CELL + CELL/2;
+    const r = CELL/2 - 1;
+
+    if (g.eaten) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(gx - 3, gy - 3, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(gx + 3, gy - 3, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#00f';
+      ctx.beginPath(); ctx.arc(gx - 3, gy - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(gx + 3, gy - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+
+    if (g.fright) {
+      ctx.fillStyle = frightTimer < 80 && Math.floor(frightTimer / 10) % 2 === 0 ? '#fff' : '#0000CC';
+    } else {
+      ctx.fillStyle = g.color;
+    }
+
+    ctx.beginPath();
+    ctx.arc(gx, gy - 1, r, Math.PI, 0, false);
+    ctx.lineTo(gx + r, gy + r);
+    const waves = 3;
+    for (let i = waves; i >= 0; i--) {
+      const wx = gx + r - (i * (2 * r / waves));
+      ctx.arc(wx - r / waves, gy + r, r / waves, 0, Math.PI, i % 2 === 0);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    if (!g.fright) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(gx - 3, gy - 3, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(gx + 3, gy - 3, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#00f';
+      ctx.beginPath(); ctx.arc(gx - 2 + g.dx, gy - 2 + g.dy, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(gx + 4 + g.dx, gy - 2 + g.dy, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) e.preventDefault();
+  if (e.key === 'ArrowLeft')  pushDir(-1, 0);
+  if (e.key === 'ArrowRight') pushDir(1, 0);
+  if (e.key === 'ArrowUp')    pushDir(0, -1);
+  if (e.key === 'ArrowDown')  pushDir(0, 1);
+});
+
+// Mobile buttons — instant response on touchstart
+function addBtn(id, dx, dy) {
+  const el = document.getElementById(id);
+  el.addEventListener('touchstart', e => {
+    e.preventDefault();
+    el.classList.add('pressed');
+    pushDir(dx, dy);
+  }, { passive: false });
+  el.addEventListener('touchend', e => {
+    e.preventDefault();
+    el.classList.remove('pressed');
+  }, { passive: false });
+  el.addEventListener('mousedown', e => { pushDir(dx, dy); });
+}
+
+addBtn('btn-up',    0, -1);
+addBtn('btn-down',  0,  1);
+addBtn('btn-left', -1,  0);
+addBtn('btn-right', 1,  0);
+
+// Swipe support
+let touchStartX = 0, touchStartY = 0;
+canvas.addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+  if (gameState === 'waiting') { gameState = 'playing'; msgEl.textContent = ''; }
+}, { passive: true });
+canvas.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) > Math.abs(dy)) pushDir(dx > 0 ? 1 : -1, 0);
+  else pushDir(0, dy > 0 ? 1 : -1);
+}, { passive: true });
+
+initGame();
+loop();
+</script>
+</body>
+</html>
